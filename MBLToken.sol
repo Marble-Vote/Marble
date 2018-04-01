@@ -2,9 +2,9 @@ pragma solidity ^0.4.16;
 
 interface tokenRecipient { function receiveApproval(address _from, uint256 _value, address _token, bytes _extraData) external; }
 
-contract MRBLToken {
+contract MBLToken {
     string public name = "Marble";
-    string public symbol = "MRBL";
+    string public symbol = "MBL";
     uint256 public decimals = 18;
     uint256 public totalSupply = 100*1000*1000*10**decimals;
 
@@ -15,7 +15,7 @@ contract MRBLToken {
 
     event Burn(address indexed from, uint256 value);
 
-    function MRBLToken() public {
+    function MBLToken() public {
         balanceOf[msg.sender] = totalSupply;                
     }
 
@@ -31,7 +31,7 @@ contract MRBLToken {
         assert(balanceOf[_from] + balanceOf[_to] == previousBalances);
     }
 
-    function balanceOf(address _tokenOwner) external constant returns (uint balance) {
+    function balanceOf(address _tokenOwner) external view returns (uint balance) {
         return balanceOf[_tokenOwner];
     }
     function transfer(address _to, uint256 _value) public {
