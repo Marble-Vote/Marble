@@ -30,17 +30,27 @@ contract MarbleEarth {
 
   address public verificationAddress;
   address public ejectionAddress;
-  address public tokenAddress;
+  address public tokenAddress = 0x8D7dDaD45789a64c2AF9b4Ce031C774e277F1Cd4;
 
   address public lastVerified;
 
-//constructor
+  event NewVoter(address indexed voter, bytes32 proof);
+  event EjectedVoter(address indexed voter);
+  event NewMoonProposed(address indexed moon);
 
-  function MarbleEarth(address verificationMoon, address ejectionMoon) public {
+  function MarbleEarth() public {
 
-    verificationMoon = verificationMoon;
-    ejectionMoon = ejectionMoon;
+    verificationAddress = 0x7413FCf03b08bB07e5992608A000857833e7D022;
+    ejectionAddress = 0xd751600cBeA0598E3EFE363c6a8f85c5fe18E43D;
 
+  }
+
+  function getVoters() view external returns (address[]){
+    return addresses;
+  }
+
+  function getIdentities() view external returns (bytes32[]) {
+    return identities;
   }
 
   function proposeNewMoon(address mAddress, MoonType moonType) public  {
@@ -58,6 +68,7 @@ contract MarbleEarth {
 
       proposedMoons[mAddress] = NewMoon(block.timestamp, moonType, 1);
       proposedMoonsIndex.push(mAddress);
+      emit NewMoonProposed(mAddress);
 
   }
 
@@ -123,6 +134,8 @@ contract MarbleEarth {
     tokenContract.transfer(verifierAddress, verifierAllocation());
     lastVerified = voterAddress;
 
+    emit NewVoter(voterAddress, identity);
+
   }
 
   function getBalance() public returns (uint256) {
@@ -173,6 +186,7 @@ contract MarbleEarth {
       delete addresses[arrayIndex];
       delete identities[arrayIndex];
       delete voterMap[ejectedAddress];
+      emit EjectedVoter(ejectedAddress);
 
   }
 

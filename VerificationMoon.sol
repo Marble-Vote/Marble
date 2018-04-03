@@ -9,12 +9,10 @@ contract VerificationMoon {
   
     struct NewVoter {
 
-
       uint timeAdded;
       uint64 votes;
       bytes32 argument;
       mapping (address => bool) supportMap;
-
 
   }
 
@@ -23,6 +21,7 @@ contract VerificationMoon {
   uint16 public numberOfProposed;
   address[] public voterAddresses;
   bytes32[] public voterIdentities;
+  event VoterProposed(address indexed proposed, bytes32 argument);
 
   function propose(address selfProposed, bytes32 argument, address[] addresses, bytes32[] identities) external {
 
@@ -41,6 +40,8 @@ contract VerificationMoon {
     newVoter.argument = argument;
     newVoter.timeAdded = block.timestamp;
     proposedVoters[selfProposed] = newVoter;
+
+    emit VoterProposed(selfProposed, argument);
 
     }
 

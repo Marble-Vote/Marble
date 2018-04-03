@@ -20,6 +20,8 @@ contract EjectionMoon {
   uint16 public numberOfProposed;
   address[] public voterAddresses;
   bytes32[] public voterIdentities;
+  event EjectionProposed(address indexed proposed, bytes32 argument);
+
 
   function propose(address proposed, bytes32 argument, address[] addresses, bytes32[] identities) external {
 
@@ -33,6 +35,8 @@ contract EjectionMoon {
     newEjection.argument = argument;
     newEjection.timeAdded = block.timestamp;
     proposedEjections[proposed] = newEjection;
+    emit EjectionProposed(proposed, argument);
+
 
   }
 

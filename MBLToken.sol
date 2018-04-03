@@ -12,7 +12,6 @@ contract MBLToken {
     mapping (address => mapping (address => uint256)) public allowance;
 
     event Transfer(address indexed from, address indexed to, uint256 value);
-
     event Burn(address indexed from, uint256 value);
 
     function MBLToken() public {
