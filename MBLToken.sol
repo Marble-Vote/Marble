@@ -18,7 +18,6 @@ contract MBLToken {
         balanceOf[msg.sender] = totalSupply;                
     }
 
-
     function _transfer(address _from, address _to, uint _value) internal {
         require(_to != 0x0);
         require(balanceOf[_from] >= _value);
@@ -29,12 +28,13 @@ contract MBLToken {
         emit Transfer(_from, _to, _value);
         assert(balanceOf[_from] + balanceOf[_to] == previousBalances);
     }
+ 
+    function transfer(address _to, uint256 _value) public {
+        _transfer(msg.sender, _to, _value);
+    }
 
     function balanceOf(address _tokenOwner) external view returns (uint balance) {
         return balanceOf[_tokenOwner];
-    }
-    function transfer(address _to, uint256 _value) public {
-        _transfer(msg.sender, _to, _value);
     }
 
     function transferFrom(address _from, address _to, uint256 _value) public returns (bool success) {

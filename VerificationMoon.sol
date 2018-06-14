@@ -1,9 +1,13 @@
-pragma solidity ^0.4.18;
+pragma solidity ^0.4.21;
 // We have to specify what version of compiler this code will compile with
 
+ interface MarbleEarth { 
 
-interface MarbleEarth { function addVoter(address voterAddress, address verifierAddress, bytes32 identity) external; }
+  function addVoter(address voterAddress, address verifierAddress, string identity) external; 
+  function isVoter(address potentialVoter) external returns (bool);
+  function getRollSize() external returns (uint);
 
+}
 
 contract VerificationMoon {
   
@@ -11,77 +15,60 @@ contract VerificationMoon {
 
       uint timeAdded;
       uint64 votes;
-      bytes32 argument;
+      string proof;
       mapping (address => bool) supportMap;
 
   }
 
-  address public marbleEarthAddress;
+  MarbleEarth public marbleEarth = MarbleEarth(0x8D7dDaD45789a64c2AF9b4Ce031C774e277F1Cd4);
+
   mapping (address => NewVoter) public proposedVoters;
-  uint16 public numberOfProposed;
-  address[] public voterAddresses;
-  bytes32[] public voterIdentities;
-  event VoterProposed(address indexed proposed, bytes32 argument);
+  address[] public proposedVotersIndex;
 
-  function propose(address selfProposed, bytes32 argument, address[] addresses, bytes32[] identities) external {
+  function propose(string proof) external {
+        //has the oldest proposed voter been given a whole week? if so, purge that voter
+    if ((block.timestamp - proposedVoters[proposedVotersIndex[0]].timeAdded) > 604800) {
 
-    if (msg.sender != marbleEarthAddress)
+      delete proposedVoters[proposedVotersIndex[0]];
+      delete proposedVotersIndex[0];
+
+      }
+          //is the proposed voter list full? 
+    if (proposedVotersIndex.length >= 1000) {
       return;
-
-    voterAddresses = addresses;
-    voterIdentities = identities;
-
-    if (addresses.length == 0) {
-        addVoter(selfProposed, selfProposed, argument);
+      }
+        //is this proposed voter already on the proposed voter list? 
+    if (proposedVoters[msg.sender].timeAdded > 0) {
+      return;
     }
-    else {
 
     NewVoter memory newVoter;
-    newVoter.argument = argument;
+    newVoter.proof = proof;
     newVoter.timeAdded = block.timestamp;
-    proposedVoters[selfProposed] = newVoter;
-
-    emit VoterProposed(selfProposed, argument);
+    proposedVoters[msg.sender] = newVoter;
 
     }
 
-  }
-
-  function addVoter(address verifiedAddress,address verifierAddress, bytes32 argument) internal {
-
-         MarbleEarth marbleEarth = MarbleEarth(marbleEarthAddress);
-         marbleEarth.addVoter(verifiedAddress, verifierAddress, argument);
-
-  }
-
-  function supportNewVoter(address _address) public {
-
-    if ((block.timestamp - proposedVoters[0].timeAdded) > 604800) {
-
-      delete proposedVoters[0];
-      numberOfProposed--;
-
-      }
-
-    if (numberOfProposed >= 1000) {
-
+  function supportNewVoter(address supportedAddress) external {
+    //is this supporter on the rolls?
+    if (!marbleEarth.isVoter(msg.sender)) {
       return;
+    }  
+    //has this supporter supported for this address already?
+    if (proposedVoters[supportedAddress].supportMap[msg.sender] == true) {
+      return;
+    }
 
-      }
+      proposedVoters[supportedAddress].supportMap[msg.sender] = true;
+      proposedVoters[supportedAddress].votes++;
+    
+    if (proposedVoters[supportedAddress].votes*100 / marbleEarth.getRollSize() > 50) {
 
-    if (!proposedVoters[_address].supportMap[msg.sender]) {
-      proposedVoters[_address].supportMap[msg.sender] = true;
-      proposedVoters[_address].votes++;
-      numberOfProposed++;
+        marbleEarth.addVoter(supportedAddress, msg.sender, proposedVoters[supportedAddress].proof);
+        delete proposedVoters[supportedAddress];
 
     }
 
-    if (proposedVoters[_address].votes*100 / voterAddresses.length > 50) {
-
-        addVoter(_address, msg.sender, proposedVoters[_address].argument);
-        delete proposedVoters[_address];
-        numberOfProposed--;
-
-    }
   }
+
 }
