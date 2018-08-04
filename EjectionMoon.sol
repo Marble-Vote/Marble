@@ -21,7 +21,7 @@ contract EjectionMoon {
   }
 
   MarbleEarth public marbleEarth = MarbleEarth(0x8D7dDaD45789a64c2AF9b4Ce031C774e277F1Cd4);
-
+  
   mapping (address => NewVoter) public proposedVoters;
   address[] public proposedVotersIndex;
 
