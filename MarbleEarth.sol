@@ -1,4 +1,4 @@
-pragma solidity ^0.4.21;
+pragma solidity ^0.4.24;
 // We have to specify what version of compiler this code will compile with
 
 contract MarbleEarth {
@@ -29,12 +29,13 @@ contract MarbleEarth {
   address public lastVerifier;
 
   uint public lastBlockNumber = 0;
-  bytes32 public secondLastHash = "";
-  uint8 lotteryCoefficient = 0;
+  uint lotteryCoefficient = 0;
 
   function MarbleEarth() public {
+
     voterMap[0xAe4Ef52D81Ed41f8D84bc6512aa52D050c488ddd] = "https://www.linkedin.com/in/jp-mohler/";
     verificationAddress = 0xAe4Ef52D81Ed41f8D84bc6512aa52D050c488ddd;
+
   }
 
   function getVotersByIndex(uint index) view external returns (address){
@@ -70,9 +71,9 @@ contract MarbleEarth {
     return proposedMoons[moonAddress].yea;
   }
 
-  function getProposedMoonAgainstCount(address moonAddress) view external returns (uint64) {
+  function getProposedMoonNayCount(address moonAddress) view external returns (uint64) {
 
-    return proposedMoons[moonAddress].against;
+    return proposedMoons[moonAddress].nay;
   }
 
   function getRollSize() view external returns (uint) {
@@ -131,7 +132,7 @@ contract MarbleEarth {
 
   function addNewMoon(address moonAddress, bool verification) public {
 
-      proposedMoons[moonAddress] = NewMoon(block.timestamp, verification, 0);
+      proposedMoons[moonAddress] = NewMoon(block.timestamp, verification, 0, 0);
       proposedMoonsIndex.push(moonAddress);
 
   }
@@ -166,10 +167,6 @@ contract MarbleEarth {
   }
   function updateBlockNumber() public {
       lastBlockNumber = block.number;
-  }
-
-  function setSecondLastHash(bytes32 lastHash) public {
-    secondLastHash = lastHash;
   }
 
   function alreadyVoted(address moonAddress, address voterAddress) view public returns (bool) {
@@ -296,12 +293,11 @@ contract MarbleEarth {
     addVoterToMap(voterAddress, identity);
     voteCountBump();
 
-    enterLottery(voterAddress);
-    enterLottery(verifierAddress);
+    enterLottery(lastVerified);
+    enterLottery(lastVerifier);
 
     updateLastVerified(voterAddress);
     updateLastVerifier(verifierAddress);
-
     updateBlockNumber();
 
   }
@@ -310,8 +306,12 @@ contract MarbleEarth {
     return block.blockhash(lastBlockNumber);
   }
 
-  function getHashOfLastVoterAndBlockHash(bytes32 lastBlockHash) view public returns (bytes32) {
-    return keccak256(lastVerified, lastBlockHash);
+  function bytesToInt(bytes32 bytesForConversion) pure public returns (uint) {
+            return uint(bytesForConversion);
+  }
+
+  function getDoubleHash(address entrantAddress, bytes32 hash2) view public returns (bytes32) {
+    return keccak256(entrantAddress, hash2);
   }
 
   function fewerVotersThan(uint threshold) view public returns (bool) {
@@ -328,38 +328,28 @@ contract MarbleEarth {
     return false;
   }
 
-    function getHashOfHashes(bytes32 lastHash) view public returns (bytes32) {
-
-            return keccak256(secondLastHash, lastHash); 
-  }
-
-  function bytesToInt(bytes32 hashOfHashes) pure public returns (uint) {
-            return uint(hashOfHashes);
-  }
-
-  function getLotteryCoefficient() view public returns (uint8) {
+  function getLotteryCoefficient() view public returns (uint) {
     return lotteryCoefficient;
   }
 
-  function winsLottery(bytes32 lastHash) view public returns (bool) {
-
-   if (isNumberSmaller(bytesToInt(getHashOfHashes(lastHash)), 2**(245 - lotteryCoefficient))) {
-    return true;
-           }
-    return false;
-
+  function winsLottery(address entrantAddress) view public returns (bool) {
+       if (isNumberSmaller(bytesToInt(getDoubleHash(entrantAddress, getLastVoterBlockHash())), 2**(245 - lotteryCoefficient))) {
+        return true;
+       }
+       return false;
   }
 
-  function runLottery() public {
+  function enterLottery(address entrantAddress) view public {
+   if (winsLottery(entrantAddress)) {
+          rewardLotteryWinner(entrantAddress);
+           }
+  }
 
-    bytes32 lastHash =  getHashOfLastVoterAndBlockHash(getLastVoterBlockHash());
-         //1 in 1000 chance
-        if (winsLottery(245 - lotteryCoefficient, lastHash)) {
-             tokenContract.transfer(lastVerified, getBalance()/5);
+  function rewardLotteryWinner(address winnerAddress) view public returns (bytes32) {
+
+             tokenContract.transfer(winnerAddress, getBalance()/5);
              lotteryCoefficient = lotteryCoefficient + 2;
-        } 
 
-      setSecondLastHash(lastHash);
   }
 
   function ejectVoter(address ejectedAddress, uint arrayIndex) external {
@@ -377,6 +367,8 @@ contract MarbleEarth {
   }
 
 }
+
+//before update: 
 
 contract MBLToken {
   function transfer(address _to, uint256 _value) public;
