@@ -1,9 +1,9 @@
-pragma solidity ^0.4.24;
+pragma solidity ^0.4.21;
 // We have to specify what version of compiler this code will compile with
 
  interface MarbleEarth { 
 
-  function addVoter(address voterAddress, address verifierAddress, bytes32 identity) external; 
+  function ejectVoter(address ejectedAddress, uint arrayIndex) external;
   function isVoter(address potentialVoter) external returns (bool);
   function getRollSize() external returns (uint);
 
@@ -11,69 +11,143 @@ pragma solidity ^0.4.24;
 
 contract EjectionMoon {
   
-    struct NewVoter {
+   event NewProposed(address newProposedAddress);
+
+    struct NewEjection {
 
       uint timeAdded;
-      uint64 votes;
-      bytes32 proof;
+      uint64 yea;
+      uint64 nay;
+      uint arrayIndex;
       mapping (address => bool) supportMap;
 
   }
 
-  MarbleEarth public marbleEarth = MarbleEarth(0x8D7dDaD45789a64c2AF9b4Ce031C774e277F1Cd4);
+  MarbleEarth public marbleEarth = MarbleEarth(0xBEb9BA7Af24ef5169b5a23BF22FD46776b92F2B5);
+  mapping (address => NewEjection) public proposedEjections;
+  uint32 selectionPeriod = 604800;
+
+
+
+  function propose(address proposedEjection, uint arrayIndex) external {
+
+    if (alreadyProposed(proposedEjection)) {
+      return;
+    }
+    emit NewProposed(msg.sender);
+    addNewProposed(proposedEjection, arrayIndex);
+
+    }
+
+  function alreadyProposed(address supportedAddress) view public returns (bool) {
   
-  mapping (address => NewVoter) public proposedVoters;
-  address[] public proposedVotersIndex;
-
-  event VoterProposed(address indexed proposed, bytes32 argument);  
-  event VoterSupported(address indexed supported, bool elected);  
-
-  function propose(bytes32 proof) external {
-        //has the oldest proposed voter been given a whole week? if so, purge that voter
-    if ((block.timestamp - proposedVoters[proposedVotersIndex[0]].timeAdded) > 604800) {
-
-      delete proposedVoters[proposedVotersIndex[0]];
-      delete proposedVotersIndex[0];
-
-      }
-          //is the proposed voter list full? 
-    if (proposedVotersIndex.length >= 1000) {
-      return;
-      }
-        //is this proposed voter already on the proposed voter list? 
-    if (proposedVoters[msg.sender].timestamp != 0) {
-      return;
+   if (proposedEjections[supportedAddress].timeAdded > 0) {
+      return true;
     }
+    return false;
+   }
 
-    NewVoter memory newVoter;
-    newVoter.proof = proof;
-    newVoter.timeAdded = block.timestamp;
-    proposedVoters[msg.sender] = newVoter;
+  function addNewProposed(address newProposed, uint arrayIndex) public {
+      
+      proposedEjections[newProposed] = NewEjection(block.timestamp, 0, 0, arrayIndex);
 
-    emit VoterProposed(msg.sender, proof);
-    }
+   }
+
 
   function supportNewVoter(address supportedAddress) external {
-    //is this supporter on the rolls?
-    if (!marbleEarth.isVoter(msg.sender)) {
+    if (!isVoter(msg.sender)) {
       return;
     }  
-    //has this supporter supported for this address already?
-    if (proposedVoters[supportedAddress].supportMap[msg.sender] == true) {
+    if (isSupporter(msg.sender, supportedAddress)) {
       return;
     }
 
-      proposedVoters[supportedAddress].supportMap[msg.sender] = true;
-      proposedVoters[supportedAddress].votes++;
-    
-    if (proposedVoters[supportedAddress].votes*100 / marbleEarth.getRollSize() > 50) {
-
-        marbleEarth.addVoter(supportedAddress, msg.sender, proposedVoters[supportedAddress].proof);
-        delete proposedVoters[supportedAddress];
-
+    if (!alreadyProposed(supportedAddress)) {
+      return;
     }
 
-    emit VoterSupported(supportedAddress, elected);
+    vote(supportedAddress);
+    
+    if (wins(supportedAddress)) {
+        ejectVoter(supportedAddress, proposedEjections[supportedAddress].arrayIndex);
+    }
+
   }
+
+   function isVoter(address voterAddress) public returns (bool) {
+    if (marbleEarth.isVoter(voterAddress)) {
+      return true;
+    }  
+    return false;
+   }
+
+   function isSupporter(address supporter, address voter) view public returns (bool) {
+
+      if (proposedEjections[voter].supportMap[supporter] == true) {
+      return true; }
+      return false;
+
+   }
+
+  function vote(address supportedAddress) public {
+
+      proposedEjections[supportedAddress].supportMap[msg.sender] = true;
+      proposedEjections[supportedAddress].yea++;
+
+   }
+
+function wins(address supportedAddress) view public returns (bool) {
+
+    if (hasSuperMajority(supportedAddress) && electionLongEnough(supportedAddress)) {
+    return true;
+    }
+    return false;
+  }
+
+function hasSuperMajority(address voterAddress) view public returns (bool) {
+
+  if (getYeaNayRatio(voterAddress) >= 50) {
+    return true;
+  }
+return false;
+}
+
+function electionLongEnough(address voterAddress) view public returns (bool) {
+  uint timeAdded = proposedEjections[voterAddress].timeAdded;
+
+  if (getTimeSince(timeAdded) > selectionPeriod) {
+      return true;
+    }
+    return false;
+}
+
+ function getTimeSince(uint time) view public returns (uint) {
+    return (block.timestamp - time);
+  }
+
+function getYeaNayRatio(address voterAddress) view public returns (uint) {
+
+      uint yeas = getYeasByVoter(voterAddress);
+      return (yeas*100)/(getNaysByVoter(voterAddress)+yeas);
+  }
+
+
+  function getNaysByVoter(address voterAddress) view public returns (uint64) {
+    return proposedEjections[voterAddress].nay;
+  }
+
+
+    function getYeasByVoter(address voterAddress) view public returns (uint64) {
+    return proposedEjections[voterAddress].yea;
+  }
+
+
+   function ejectVoter(address supportedAddress, uint arrayIndex) public {
+      marbleEarth.ejectVoter(supportedAddress, arrayIndex);
+   }
+
+  function getProofByAddress(address proposedAddress) view external returns (uint) {
+    return proposedEjections[proposedAddress].arrayIndex;
+  }  
 
 }

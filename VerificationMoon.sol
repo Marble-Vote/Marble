@@ -11,10 +11,13 @@ pragma solidity ^0.4.21;
 
 contract VerificationMoon {
   
+   event NewProposed(address newProposedAddress);
+
     struct NewVoter {
 
       uint timeAdded;
-      uint64 votes;
+      uint64 yea;
+      uint64 nay;
       string proof;
       mapping (address => bool) supportMap;
 
@@ -22,65 +25,60 @@ contract VerificationMoon {
 
   MarbleEarth public marbleEarth = MarbleEarth(0xBEb9BA7Af24ef5169b5a23BF22FD46776b92F2B5);
   mapping (address => NewVoter) public proposedVoters;
-  address[] public proposedVotersIndex;
+  uint32 electionPeriod = 604800;
 
-//external getters for checking state of moon
-  function getVotesByAddress(address proposedAddress) view external returns (uint) {
-    return proposedVoters[proposedAddress].votes;
+
+
+  function propose(string proof) external {
+
+    if (alreadyProposed(msg.sender)) {
+      return;
+    }
+
+    emit NewProposed(msg.sender);
+    addNewProposed(msg.sender, proof);
+
+    }
+
+  function alreadyProposed(address supportedAddress) view public returns (bool) {
+  
+   if (proposedVoters[supportedAddress].timeAdded > 0) {
+      return true;
+    }
+    return false;
+   }
+
+  function addNewProposed(address newProposed, string proof) public {
+      
+      proposedVoters[newProposed] = NewVoter(block.timestamp, 0, 0, proof);
+
+   }
+
+
+  function supportNewVoter(address supportedAddress) external {
+    if (!isVoter(msg.sender)) {
+      return;
+    }  
+    if (isSupporter(msg.sender, supportedAddress)) {
+      return;
+    }
+
+    if (!alreadyProposed(supportedAddress)) {
+      return;
+    }
+
+    vote(supportedAddress);
+    
+    if (wins(supportedAddress)) {
+        addVoter(supportedAddress, msg.sender, proposedVoters[supportedAddress].proof);
+    }
+
   }
-
-  function getProofByAddress(address proposedAddress) view external returns (string) {
-    return proposedVoters[proposedAddress].proof;
-  }  
-  function getIndexSize() view external returns (uint) {
-      return proposedVotersIndex.length;
-   }
-
-   function getAddressByIndex(uint16 index) view external returns (address) {
-
-    if (proposedVotersIndex.length > index) {
-    return proposedVotersIndex[index];
- }
-  return 0;
-
-   }
 
    function isVoter(address voterAddress) public returns (bool) {
     if (marbleEarth.isVoter(voterAddress)) {
       return true;
     }  
-    return false;
-   }
-
-   function isIndexFull() view public returns (bool) {
-    if (proposedVotersIndex.length > 99) {
-      return true;
-    }
-    return false;
-   }
-
-   function isNewestVoterStale() view public returns (bool) {
-   
-    if ((block.timestamp - proposedVoters[proposedVotersIndex[99]].timeAdded) > 600) { 
-      return true;
-    }
-    return false;
-
-   }
-
-   function clearVoterList() public returns (bool) {
-
-     for (uint i=0; i<proposedVotersIndex.length; i++) {
-      delete proposedVoters[proposedVotersIndex[i]];      
-       }
-      delete proposedVotersIndex;
-
-   }
-
-   function doesVoterExist(address supportedAddress) view public returns (bool) {
-   if (proposedVoters[supportedAddress].timeAdded > 0) {
-      return true;
-    }
     return false;
    }
 
@@ -92,76 +90,66 @@ contract VerificationMoon {
 
    }
 
+  function vote(address supportedAddress) public {
+
+      proposedVoters[supportedAddress].supportMap[msg.sender] = true;
+      proposedVoters[supportedAddress].yea++;
+
+   }
+
+function wins(address supportedAddress) view public returns (bool) {
+
+    if (hasSuperMajority(supportedAddress) && electionLongEnough(supportedAddress)) {
+    return true;
+    }
+    return false;
+  }
+
+function hasSuperMajority(address voterAddress) view public returns (bool) {
+
+  if (getYeaNayRatio(voterAddress) >= 50) {
+    return true;
+  }
+return false;
+}
+
+function electionLongEnough(address voterAddress) view public returns (bool) {
+  uint timeAdded = proposedVoters[voterAddress].timeAdded;
+
+  if (getTimeSince(timeAdded) > electionPeriod) {
+      return true;
+    }
+    return false;
+}
+
+ function getTimeSince(uint time) view public returns (uint) {
+    return (block.timestamp - time);
+  }
+
+
+function getYeaNayRatio(address voterAddress) view public returns (uint) {
+
+      uint yeas = getYeasByVoter(voterAddress);
+      return (yeas*100)/(getNaysByVoter(voterAddress)+yeas);
+  }
+
+
+  function getNaysByVoter(address voterAddress) view public returns (uint64) {
+    return proposedVoters[voterAddress].nay;
+  }
+
+
+    function getYeasByVoter(address voterAddress) view public returns (uint64) {
+    return proposedVoters[voterAddress].yea;
+  }
+
+
    function addVoter(address newVoter, address verifier, string proof) public {
       marbleEarth.addVoter(newVoter, verifier, proof);
    }
 
-   function vote(address supportedAddress) public {
-
-      proposedVoters[supportedAddress].supportMap[msg.sender] = true;
-      proposedVoters[supportedAddress].votes++;
-
-   }
-
-   function hasMajority(address supportedAddress) public returns (bool) {
-    if ((proposedVoters[supportedAddress].votes*100 / marbleEarth.getRollSize()) > 50) {
-      return true;
-    }
-    return false;
-   }
-
-   function addNewProposed(address newProposed, string proof) public {
-    NewVoter memory newVoter;
-    newVoter.proof = proof;
-    newVoter.timeAdded = block.timestamp;
-    proposedVoters[newProposed] = newVoter;
-    proposedVotersIndex.push(newProposed);
-   }
-
-   function deleteVoter(address voterAddress) public {
-        delete proposedVoters[voterAddress];
-   }
-
-  function propose(string proof) external {
-    //has the oldest proposed voter been given a whole week? if so, purge that voter, should be 604800
-    if (doesVoterExist()) {
-      return;
-    }
-
-    if (isIndexFull()) {
-      if (isNewestVoterStale()) {
-          clearVoterList();
-      }
-      else {
-        return;
-      }
-    }   
-        //is this proposed voter already on the proposed voter list? 
-    addNewProposed(msg.sender, proof);
-
-    }
-
-  function supportNewVoter(address supportedAddress) external {
-    //is this supporter on the rolls?
-    if (!isVoter(msg.sender)) {
-      return;
-    }  
-    //has this supporter supported for this address already?
-    if (isSupporter(msg.sender, supportedAddress)) {
-      return;
-    }
-
-    if (!doesVoterExist(supportedAddress)) {
-      return;
-    }
-
-    vote(supportedAddress);
-    
-    if (hasMajority(supportedAddress)) {
-        addVoter(supportedAddress, msg.sender, proposedVoters[supportedAddress].proof);
-        deleteVoter(supportedAddress);
-    }
-
-  }
+  function getProofByAddress(address proposedAddress) view external returns (string) {
+    return proposedVoters[proposedAddress].proof;
+  }  
 
 }

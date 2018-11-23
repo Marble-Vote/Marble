@@ -1,12 +1,11 @@
 pragma solidity ^0.4.24;
-// We have to specify what version of compiler this code will compile with
 
 contract MarbleEarth {
 
   struct NewMoon {
 
     uint timeAdded;
-    bool verification;
+    uint8 moonType;
     uint64 yea;
     uint64 nay;
     mapping (address => bool) supportMap;
@@ -14,40 +13,186 @@ contract MarbleEarth {
   }
 
   MBLToken public tokenContract = MBLToken(0x3DADd4EC1a4Cfc1D035cD6C65262D06294Fe626b);
+  LotteryMoon public lotteryContract = LotteryMoon(lotteryAddress);
+  uint32 moonElectionPeriod = 604800;
 
   address[] addresses = [0xAe4Ef52D81Ed41f8D84bc6512aa52D050c488ddd];
   string[] identities = ["https://www.linkedin.com/in/jp-mohler/"];
+
   mapping (address => string) voterMap;
   uint voterCount = 0;
+
 
   mapping (address => NewMoon) public proposedMoons;
   address[] public proposedMoonsIndex;
 
   address public verificationAddress;
   address public ejectionAddress;
-  address public lastVerified;
-  address public lastVerifier;
+  address public lotteryAddress;
 
-  uint public lastBlockNumber = 0;
-  uint lotteryCoefficient = 0;
+  event NewMoonEvent(address newMoonAddress);
 
-  function MarbleEarth() public {
+ constructor() public {
 
     voterMap[0xAe4Ef52D81Ed41f8D84bc6512aa52D050c488ddd] = "https://www.linkedin.com/in/jp-mohler/";
     verificationAddress = 0xAe4Ef52D81Ed41f8D84bc6512aa52D050c488ddd;
 
   }
 
+//PROPOSE
+  function proposeNewMoon(address moonAddress, uint8 moonType) public {
+   
+      if (!isVoter(msg.sender)) {
+      return;
+    }
+
+    if (isMoonProposed(moonAddress)) {
+      return;
+    }
+     addNewMoon(moonAddress, moonType);
+  }
+
+  function isVoter(address potentialVoter) view public returns (bool) {
+    bytes memory memString = bytes(voterMap[potentialVoter]); 
+    if (memString.length != 0) {
+        return true;
+    }
+    return false;
+  }
+
+  function isMoonProposed(address moonAddress) view public returns (bool) {
+
+    if (proposedMoons[moonAddress].timeAdded > 0) {
+      return true; }
+
+    return false;
+
+  }
+
+
+  function addNewMoon(address moonAddress, uint8 moonType) public {
+    
+      emit NewMoonEvent(moonAddress);
+      proposedMoons[moonAddress] = NewMoon(block.timestamp, moonType, 0, 0);
+      proposedMoonsIndex.push(moonAddress);
+
+  }
+
+
+//SUPPORT
+
+    function voteOnMoon(address newMoonAddress, bool vote) public {
+
+      if (!isValidSupporter(newMoonAddress, msg.sender)) {
+        return;
+      }
+
+      castVote(newMoonAddress, msg.sender, vote);
+    if (vote) {
+    if (hasSuperMajority(newMoonAddress)) {
+      replaceNewMoon(proposedMoons[newMoonAddress].moonType, newMoonAddress);
+    }
+}
+  }
+
+
+  function isValidSupporter(address newMoonAddress, address voter) view public returns (bool) {
+
+      if (!isVoter(voter) || alreadyVoted(newMoonAddress, voter)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  function alreadyVoted(address moonAddress, address voterAddress) view public returns (bool) {
+
+    if (proposedMoons[moonAddress].supportMap[voterAddress]) {
+      return true;
+    }
+    return false;
+  } 
+
+  function castVote(address moonAddress, address voterAddress, bool supports) public {
+      proposedMoons[moonAddress].supportMap[voterAddress] = true;
+
+      if (supports) { 
+        proposedMoons[moonAddress].yea++;
+
+      }
+      else {
+        proposedMoons[moonAddress].nay++;
+
+      }
+  }
+
+
+function winsElection(address moonAddress) view public returns (bool) {
+
+    if (hasSuperMajority(moonAddress) && electionLongEnough(moonAddress)) {
+    return true;
+    }
+    return false;
+  }
+
+function hasSuperMajority(address moonAddress) view public returns (bool) {
+
+  if (getYeaNayRatio(moonAddress) >= 67) {
+    return true;
+  }
+return false;
+}
+
+function electionLongEnough(address moonAddress) view public returns (bool) {
+  uint timeAdded = proposedMoons[moonAddress].timeAdded;
+
+  if (getTimeSince(timeAdded) > moonElectionPeriod) {
+      return true;
+    }
+    return false;
+}
+
+ function getTimeSince(uint time) view public returns (uint) {
+    return (block.timestamp - time);
+  }
+
+
+function getYeaNayRatio(address moonAddress) view public returns (uint64) {
+
+      uint64 yeas = getYeasByMoon(moonAddress);
+      uint64 yeasRatio = (yeas*100)/(getNaysByMoon(moonAddress)+yeas);
+
+      return yeasRatio;
+  }
+
+
+  function getNaysByMoon(address moonAddress) view public returns (uint64) {
+    return proposedMoons[moonAddress].nay;
+  }
+
+
+    function getYeasByMoon(address moonAddress) view public returns (uint64) {
+    return proposedMoons[moonAddress].yea;
+  }
+
+  function replaceNewMoon(uint8 moonType, address newMoonAddress) internal {
+
+      if (moonType == 0) {
+       verificationAddress = newMoonAddress;
+      }
+
+      else if (moonType == 1) {
+        ejectionAddress = newMoonAddress;
+      }
+
+      else if (moonType == 2) {
+        lotteryAddress = newMoonAddress;
+      }
+
+  }
+
   function getVotersByIndex(uint index) view external returns (address){
     return addresses[index];
-  }
-
-  function transferMBL(address to, uint256 value) public {
-    tokenContract.transfer(to, value);
-  }
-
-  function transferAuto() public {
-    tokenContract.transfer(0xAe4Ef52D81Ed41f8D84bc6512aa52D050c488ddd, 55);
   }
 
   function getBalance() view public returns (uint256) {
@@ -56,24 +201,6 @@ contract MarbleEarth {
 
   function getIdentitiesByIndex(uint index) view external returns (string) {
     return identities[index];
-  }
-
-  function getProposedMoonsByIndex(uint index) view external returns (address) {
-    return proposedMoonsIndex[index];
-  }
-
-  function getProposedMoonsSize() view external returns (uint) {
-    return proposedMoonsIndex.length;
-  }
-
-  function getProposedMoonForCount(address moonAddress) view external returns (uint64) {
-
-    return proposedMoons[moonAddress].yea;
-  }
-
-  function getProposedMoonNayCount(address moonAddress) view external returns (uint64) {
-
-    return proposedMoons[moonAddress].nay;
   }
 
   function getRollSize() view external returns (uint) {
@@ -88,57 +215,15 @@ contract MarbleEarth {
     return ejectionAddress;
   }
 
-  function isVoter(address potentialVoter) view public returns (bool) {
-    bytes memory memString = bytes(voterMap[potentialVoter]); 
-    if (memString.length != 0) {
-        return true;
-    }
-    return false;
-  }
-
-  function doesMoonExist(address moonAddress) view public returns (bool) {
-
-    if (proposedMoons[moonAddress].timeAdded > 0) {
-      return true; }
-
-    return false;
-
-  }
-
-  function isNewestMoonStale() view public returns (bool) {
- 
-   uint newestMoonTimeStamp = proposedMoons[proposedMoonsIndex[4]].timeAdded;
-   if ((block.timestamp - newestMoonTimeStamp) > 600) {
-      return true;
-    }
-
-    return false;
-  }
-
-  function isMoonIndexFull() view public returns (bool) {
-    if (proposedMoonsIndex.length > 4) {
-      return true;
-    }
-    return false;
-  }
-
-  function clearMoons() public {
-
-      for (uint i=0; i<proposedMoonsIndex.length; i++) {
-      delete proposedMoons[proposedMoonsIndex[i]];      
-       }
-       delete proposedMoonsIndex;
-  }
-
-  function addNewMoon(address moonAddress, bool verification) public {
-
-      proposedMoons[moonAddress] = NewMoon(block.timestamp, verification, 0, 0);
-      proposedMoonsIndex.push(moonAddress);
-
-  }
-
   function sentByVerificationAddress() view public returns (bool) {
       if (msg.sender == verificationAddress) {
+        return true;
+      }
+      return false;
+  }
+
+  function sentByEjectionAddress() view public returns (bool) {
+      if (msg.sender == ejectionAddress) {
         return true;
       }
       return false;
@@ -156,205 +241,33 @@ contract MarbleEarth {
     voterMap[voterAddress] = voterIdentity;
   }
 
-  function updateLastVerified(address voterAddress) public {
-        lastVerified = voterAddress;
-  }
-  function updateLastVerifier(address verifier) public {
-    lastVerifier = verifier;
-  }
-  function getLastVerified() view public returns (address) {
-    return lastVerified;
-  }
-  function updateBlockNumber() public {
-      lastBlockNumber = block.number;
-  }
-
-  function alreadyVoted(address moonAddress, address voterAddress) view public returns (bool) {
-
-    if (proposedMoons[moonAddress].supportMap[voterAddress]) {
-      return true;
-    }
-    return false;
-  } 
-
-  function castVote(address moonAddress, address voterAddress, bool supports) public {
-      proposedMoons[moonAddress].supportMap[voterAddress] = true;
-
-      if (supports) { 
-        proposedMoons[moonAddress].yea++;
-      }
-      else {
-        proposedMoons[moonAddress].nay++;
-      }
-  }
-
-  function getYeasByMoon(address moonAddress) public returns (uint64) {
-    return proposedMoons[moonAddress].yea;
-  }
-
-  function getNaysByMoon(address moonAddress) public returns (uint64) {
-    return proposedMoons[moonAddress].nay;
-  }
-  function getYeaNayRatio(address moonAddress) public returns (uint) {
-      return getYeasByMoon(moonAddress)*100/getNaysByMoon(moonAddress);
-  }
-
-  function hasSuperMajority(address moonAddress) view public returns (bool) {
-
-    if (getYeaNayRatio(moonAddress) >= 67) {
-    return true;
-    }
-    return false;
-  }
-
   function voteCountBump() public {
         voterCount++;
   }
 
 
-  function proposeNewMoon(address moonAddress, bool verification) public {
-   
-      if (!isVoter(msg.sender)) {
-      return;
-    }
-
-    if (doesMoonExist(moonAddress)) {
-      return;
-    }
-
-    if (isMoonIndexFull()) {
-    if (isNewestMoonStale()) {
-        clearMoons();
-      }
-    else {
-       return;
-      } 
-    }
-
-     addNewMoon(moonAddress, verification);
-  }
-
-  function opposeNewMoon (address newMoonAddress) public {
-
-          if (!isValidVoter(newMoonAddress, msg.sender)) {
-            return;
-          }
-          castVote(newMoonAddress, msg.sender, false);
-
-  }
-
-  function isValidVoter(address newMoonAddress, address voter) public returns (bool) {
-
-      if (!isVoter(voter) || alreadyVoted(newMoonAddress, voter)) {
-      return false;
-    }
-
-    return true;
-  }
-
-  function supportNewMoon(address newMoonAddress) public {
-
-      if (!isValidVoter(newMoonAddress, msg.sender)) {
-        return;
-      }
-
-      castVote(newMoonAddress, msg.sender, true);
-
-    if (hasSuperMajority(newMoonAddress)) {
-      replaceNewMoon(proposedMoons[newMoonAddress].verification, newMoonAddress);
-    }
-
-  }
-
-  function replaceNewMoon(bool verification, address newMoonAddress) internal {
-
-      if (verification) {
-       verificationAddress = newMoonAddress;
-      }
-
-      else {
-        ejectionAddress = newMoonAddress;
-      }
-
-      delete proposedMoons[newMoonAddress]; 
-
-  }
-
   function addVoter(address voterAddress, address verifierAddress, string identity) external {
   
-    if (!sentByVerificationAddress())
+    if (!sentByVerificationAddress() || isVoter(voterAddress))
       return;
-    if (isVoter(voterAddress)) {
-      return;
-    }
    
     addVoterAddress(voterAddress);
     addVoterIdentity(identity);
     addVoterToMap(voterAddress, identity);
     voteCountBump();
-
-    enterLottery(lastVerified);
-    enterLottery(lastVerifier);
-
-    updateLastVerified(voterAddress);
-    updateLastVerifier(verifierAddress);
-    updateBlockNumber();
+    lotteryContract.enterLottery(voterAddress, verifierAddress);
 
   }
 
-  function getLastVoterBlockHash() view public returns (bytes32) {
-    return block.blockhash(lastBlockNumber);
-  }
 
-  function bytesToInt(bytes32 bytesForConversion) pure public returns (uint) {
-            return uint(bytesForConversion);
-  }
-
-  function getDoubleHash(address entrantAddress, bytes32 hash2) view public returns (bytes32) {
-    return keccak256(entrantAddress, hash2);
-  }
-
-  function fewerVotersThan(uint threshold) view public returns (bool) {
-    if (voterCount < threshold) {
-      return true;
-    }
-    return false;
-  }
-
-  function isNumberSmaller(uint number, uint threshold)pure public returns (bool) {
-    if (number < threshold) {
-      return true;
-    }
-    return false;
-  }
-
-  function getLotteryCoefficient() view public returns (uint) {
-    return lotteryCoefficient;
-  }
-
-  function winsLottery(address entrantAddress) view public returns (bool) {
-       if (isNumberSmaller(bytesToInt(getDoubleHash(entrantAddress, getLastVoterBlockHash())), 2**(245 - lotteryCoefficient))) {
-        return true;
-       }
-       return false;
-  }
-
-  function enterLottery(address entrantAddress) view public {
-   if (winsLottery(entrantAddress)) {
-          rewardLotteryWinner(entrantAddress);
-           }
-  }
-
-  function rewardLotteryWinner(address winnerAddress) view public returns (bytes32) {
+  function rewardLotteryWinner(address winnerAddress) public returns (bytes32) {
 
              tokenContract.transfer(winnerAddress, getBalance()/5);
-             lotteryCoefficient = lotteryCoefficient + 2;
-
   }
 
   function ejectVoter(address ejectedAddress, uint arrayIndex) external {
     
-    if (msg.sender != ejectionAddress)
+    if (!sentByEjectionAddress())
       return;
 
     if (addresses[arrayIndex] != ejectedAddress)
@@ -368,14 +281,12 @@ contract MarbleEarth {
 
 }
 
-//before update: 
+contract LotteryMoon {
+  function enterLottery(address voterAddress, address verifierAddress) external;
+ }
 
 contract MBLToken {
   function transfer(address _to, uint256 _value) public;
   function balanceOf(address _tokenOwner) external view returns (uint balance);
    function transferFrom(address _from, address _to, uint256 _value) public returns (bool success);
-
-
  }
-
-
